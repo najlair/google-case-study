@@ -1,0 +1,228 @@
+# google-case-study
+--Prepare and upload data
+
+--Data sourse: https://divvy-tripdata.s3.amazonaws.com/index.html
+
+--Uploading CSV files on SQLite and combine them into a single table called data
+
+--Fields 
+CREATE TABLE "data" (
+	"ride_id"	TEXT,
+	"rideable_type"	TEXT,
+	"started_at"	TEXT,
+	"ended_at"	TEXT,
+	"start_station_name"	TEXT,
+	"start_station_id"	TEXT,
+	"end_station_name"	TEXT,
+	"end_station_id"	TEXT,
+	"start_lat"	REAL,
+	"start_lng"	REAL,
+	"end_lat"	REAL,
+	"end_lng"	REAL,
+	"member_casual"	TEXT,
+	"ride_length"	TEXT,
+	"minutes"	INTEGER,
+	"day_of_week"	TEXT,
+	"month_m"	INTEGER,
+	"year_y"	INTEGER,
+	"hour_of_day"	INTEGER,
+	"days_of_month"	INTEGER
+);
+
+
+INSERT INTO data (
+ride_id ,
+rideable_type,
+started_at ,
+ended_at,
+start_station_name,
+start_station_id ,
+end_station_name,
+end_station_id,
+start_lat ,
+start_lng,
+end_lat,
+end_lng,
+member_casual)
+
+(SELECT *
+from 202203-divvy-tripdata)
+UNION ALL
+(select *
+from 202204-divvy-tripdata)
+UNION ALL 
+(select *
+from 202205-divvy-tripdata)
+(select *
+from 202206-divvy-tripdata)
+UNION ALL 
+(select *
+from 202207-divvy-tripdata)
+(select *
+from 202208-divvy-tripdata)
+UNION ALL 
+(select *
+from 202209-divvy-tripdata)
+(select *
+from 202211-divvy-tripdata)
+UNION ALL 
+(select *
+from 202212-divvy-tripdata)
+(select *
+from 202301-divvy-tripdata)
+UNION ALL 
+(select *
+from 202302-divvy-tripdata)
+
+
+-- Process
+
+--Adding new columns year_y,
+ month_m,
+ day_of_week,
+ ride_length,
+ days_of_month,
+ hour_of_day
+
+UPDATE data
+SET month_m = strftime('%m',started_at),
+SET year_y = strftime('%Y', started_at),
+SET hour_of_day = strftime('%H', started_at),
+SET ride_length =strftime('%H:%M:%S',(julianday(ended_at)-julianday(started_at))*86400,'unixepoch’),
+SET day_of_week=strftime('%w', started_at )
+SET days_of_month=strftime('%d', started_at)
+
+
+UPDATE data
+SET
+	day_of_week =
+            CASE
+                WHEN day_of_week = '0' THEN 'Sunday'
+                WHEN day_of_week = '1' THEN 'Monday'
+                WHEN day_of_week = '2' THEN 'Tuesday'
+                WHEN day_of_week = '3' THEN 'Wednesday'
+                WHEN day_of_week = '4' THEN 'Thursday'
+                WHEN day_of_week = '5' THEN 'Friday'
+                WHEN day_of_week = '6' THEN 'Saturday'
+            END
+WHERE day_of_week IN ('0', '1', '2', '3', '4', '5', '6')
+
+
+
+
+--Analyzing data 
+
+
+--Number of riders for the past 12 months
+
+SELECT
+year_y AS year,
+month_m AS month,
+COUNT(DISTINCT ride_id) AS num_trips,
+member_casual
+FROM data
+GROUP BY year_y, month_m,  member_casual
+
+
+
+--Number of users each day of the week
+
+SELECT
+day_of_week,
+COUNT(case when member_casual = 'member' then 1 else NULL END) AS num_of_members,
+COUNT(case when member_casual = 'casual' then 1 else NULL END) AS num_of_casual,
+COUNT(*) AS total_users
+FROM data
+GROUP BY day_of_week
+
+
+--The number of casual users during the month
+
+SELECT 
+month_m,
+days_of_month,
+rideable_type,
+COUNT(DISTINCT ride_id) AS rides
+FROM data
+WHERE member_casual = 'casual' AND ride_id IS NOT NULL
+GROUP BY month_m, days_of_month, rideable_type
+
+--User Traffic Hour Wise
+
+Select
+hour_of_day,
+COUNT(*) AS all_hourly_users,
+COUNT(case when member_casual = 'member' then 1 else NULL END) AS num_of_members,
+COUNT(case when member_casual = 'casual' then 1 else NULL END) AS num_of_casual
+FROM data
+GROUP BY hour_of_day
+ORDER BY hour_of_day
+
+
+--AVG RIDE LENGTH
+SELECT
+year_y AS Year,
+month_m AS Month,
+member_casual,
+time(avg(strftime('%s',ride_length)),'unixepoch') AS avg_length
+FROM data
+WHERE ride_length IS NOT NULL
+GROUP BY  year_y, month_m, member_casual
+
+--Average trip length for casual riders
+
+SELECT 
+day_of_week,
+rideable_type,
+TIME(AVG(strftime('%s',ride_length)),'unixepoch') AS avg_length
+FROM data
+WHERE member_casual = 'casual' and ride_id IS NOT NULL
+GROUP BY rideable_type, day_of_week
+
+--Most used bike
+
+SELECT
+member_casual,
+rideable_type,
+COUNT(DISTINCT ride_id) as total_rides
+FROM data
+WHEREe ride_id IS NOT NULL
+GROUP by rideable_type, member_casual
+
+--Calculating Most Popular Stations for Casual Users
+
+SELECT
+start_station_name AS station_name,
+COUNT(CASE WHEN member_casual = 'casual' THEN 1 ELSE NULL END) AS num_of_casual
+FROM data
+WHERE station_name IS NOT NULL
+GROUP BY start_station_name
+ORDER BY num_of_casual DESC
+LIMIT 6
+
+
+
+--Riders by Starting Station Location 
+
+SELECT DISTINCT(start_station_name),
+start_lat,
+start_lng,
+rideable_type,
+member_casual,
+count(distinct ride_id) AS num_rides
+FROM data
+WHERE start_station_name IS NOT MULL
+GROUP BY start_station_name, rideable_type
+
+
+--Riders by Ending Station Location 
+
+SELECT DISTINCT(end_station_name),
+end_lat, 
+end_lng,
+rideable_type,
+member_casual,
+COUNT(DISTINCT ride_id) AS num_rides
+FROM data
+WHERE end_station_name IS NOT NULL
+GROUP BY end_station_name, rideable_type
